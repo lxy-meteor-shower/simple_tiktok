@@ -1,0 +1,43 @@
+version: '3'
+
+services:
+  mysql:
+    restart: always
+    image: mysql:latest
+    container_name: tiktok-mysql
+    volumes:
+      #- /apps/mysql/mydir:/mydir
+      #- /apps/mysql/datadir:/var/lib/mysql
+      #- /apps/mysql/conf/my.cnf:/etc/my.cnf
+      - ./pkg/configs/sql:/docker-entrypoint-initdb.d
+    ports:
+      - 9910:3306
+    environment:
+      - MYSQL_DATABASE=tiktok
+      - MYSQL_USER=tiktok
+      - MYSQL_PASSWORD=tiktok
+      - MYSQL_RANDOM_ROOT_PASSWORD="yes"
+      - TZ=Asia/Shanghai
+  Etcd:
+    restart: always
+    image: "quay.io/coreos/etcd:v3.5.5"
+    container_name: tiktok-etcd
+    environment:
+      - ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379
+      - ETCD_ADVERTISE_CLIENT_URLS=http://0.0.0.0:2379
+      #- ETCDCTL_API=3
+    ports:
+      - 2379:2379
+  minio:
+    restart: always
+    image: minio/minio:latest
+    container_name: tiktok-minio
+    ports:
+      - 9000:9000
+      - 9001:9001
+    environment:
+      - MINIO_ROOT_USER=tiktok
+      - MINIO_ROOT_PASSWORD=tiktok123
+    volumes:
+      - ./pkg/minio/data:/data
+    command: server --console-address ':9001' /data
