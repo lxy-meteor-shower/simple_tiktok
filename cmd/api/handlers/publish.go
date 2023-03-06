@@ -8,6 +8,7 @@ import (
 	"demo/tiktok/kitex_gen/videodemo"
 	"demo/tiktok/pkg/constants"
 	"demo/tiktok/pkg/errno"
+	"os/exec"
 	"strconv"
 	"time"
 
@@ -34,18 +35,42 @@ func Publish(ctx context.Context, c *app.RequestContext) {
 	}
 	defer fileReader.Close()
 
-	object_name := strconv.FormatInt(time.Now().Unix(), 10) + ".mp4"
-	_, err = minio1.MinioClient.PutObject(ctx, "videos", object_name, fileReader, file.Size, minio.PutObjectOptions{})
+	object_name := strconv.FormatInt(time.Now().Unix(), 10) + strconv.FormatInt(userId, 10)
+	play_name := object_name + ".mp4"
+	_, err = minio1.MinioClient.PutObject(ctx, "videos", play_name, fileReader, file.Size, minio.PutObjectOptions{})
 	if err != nil {
 		publish_sendResponse(c, err)
 		return
 	}
 
-	playurl := "http://" + constants.PlayURL + ":9000/videos/" + object_name
+	playurl := "http://" + constants.PlayURL + ":9000/videos/" + play_name
+
+	cmd := exec.Command("ffmpeg", "-i", playurl, "-ss", "0", "-frames:v", "1", "-f", "image2pipe", "-vcodec", "png", "-")
+	outPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		publish_sendResponse(c, err)
+		return
+	}
+	if err := cmd.Start(); err != nil {
+		publish_sendResponse(c, err)
+		return
+	}
+	cover_name := object_name + ".png"
+	_, err = minio1.MinioClient.PutObject(ctx, "images", cover_name, outPipe, int64(-1), minio.PutObjectOptions{ContentType: "image/png"})
+	if err != nil {
+		publish_sendResponse(c, err)
+		return
+	}
+	if err := cmd.Wait(); err != nil {
+		publish_sendResponse(c, err)
+		return
+	}
+	coverurl := "http://" + constants.PlayURL + ":9000/images/" + cover_name
+
 	err = rpc.CreateVideo(ctx, &videodemo.CreateVideoRequest{
 		UserId:   userId,
 		PlayUrl:  playurl,
-		CoverUrl: "",
+		CoverUrl: coverurl,
 		Title:    title,
 	})
 	if err != nil {
